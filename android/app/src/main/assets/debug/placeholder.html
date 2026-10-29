@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+<title>DeepSeek 桌宠 · 调试占位页</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    background: transparent; overflow: hidden; user-select: none;
+    touch-action: none; -webkit-touch-callout: none; overscroll-behavior: none;
+    font-family: 'Microsoft YaHei UI', 'Segoe UI', sans-serif;
+  }
+  #root { position: relative; width: 100%; height: 100%; }
+  #fish {
+    position: absolute; left: 0; top: 0; pointer-events: auto; cursor: grab;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 56px; line-height: 1; will-change: transform;
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,.25));
+  }
+  #fish:active { cursor: grabbing; }
+  #menu {
+    position: absolute; display: none; z-index: 10; pointer-events: auto;
+    background: rgba(255,255,255,.96); color: #222; border-radius: 10px;
+    padding: 6px 10px; font-size: 13px; line-height: 1.7;
+    box-shadow: 0 6px 20px rgba(0,0,0,.25); white-space: nowrap;
+  }
+  #menu .it { padding: 2px 2px; }
+  #menu .it:active { background: rgba(0,0,0,.08); border-radius: 6px; }
+  #dbg {
+    position: absolute; left: 4px; top: 3px; pointer-events: none;
+    color: rgba(120,200,255,.9); font: 10px/1.35 monospace; white-space: pre;
+    text-shadow: 0 1px 1px rgba(0,0,0,.6);
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <div id="fish">🐟</div>
+  <div id="menu">
+    <div class="it" data-act="site">打开网站（手机版不可用）</div>
+    <div class="it" data-act="home">回到初始位置</div>
+    <div class="it" data-act="close">关闭菜单</div>
+  </div>
+  <div id="dbg"></div>
+</div>
+<script>
+(function () {
+  'use strict';
+  var q = new URLSearchParams(location.search);
+  var SCALE = Number(q.get('scale') || 1) || 1;
+  var SIZE = Number(q.get('petSize') || 130) || 130;
+  var WAW = Number(q.get('workAreaW') || (window.screen.width * SCALE)) || 1080;
+  var WAH = Number(q.get('workAreaH') || (window.screen.height * SCALE)) || 2400;
+
+  // 与 sprite.js / constants.js 完全一致的几何口径（CSS px）
+  var STAGE_H = SIZE * 9 / 16;
+  var BOTTOM_PAD = (SIZE * (9 / 16) * (360 - 330)) / 360;
+  var MARGIN = SIZE * 0.5;
+  var WIN_W = SIZE + MARGIN * 2;
+  var WIN_H = STAGE_H + BOTTOM_PAD + MARGIN * 2;
+  var HIT = { x0: 200, y0: 50, x1: 440, y1: 335 };
+  var HIT_RECT = {
+    x: MARGIN + (HIT.x0 / 640) * SIZE,
+    y: MARGIN + BOTTOM_PAD + (HIT.y0 / 360) * STAGE_H,
+    w: ((HIT.x1 - HIT.x0) / 640) * SIZE,
+    h: ((HIT.y1 - HIT.y0) / 360) * STAGE_H
+  };
+
+  var VIEW = { x: 0, y: 0, w: WAW / SCALE, h: WAH / SCALE };
+  var pos = { x: Math.max(0, VIEW.w - 24 - SIZE), y: Math.max(0, VIEW.h - 100 - STAGE_H) };
+  var errors = [];
+  var debug = { calls: 0, lastOrigin: null, screenXMode: 'unknown', dragging: false, menuOpen: false };
+
+  var fish = document.getElementById('fish');
+  var menu = document.getElementById('menu');
+  var dbg = document.getElementById('dbg');
+  fish.style.width = SIZE + 'px';
+  fish.style.height = STAGE_H + 'px';
+  fish.style.left = MARGIN + 'px';
+  fish.style.top = (MARGIN + BOTTOM_PAD) + 'px';
+
+  function api(m) {
+    try {
+      var A = window.AndroidPet;
+      if (A && typeof A[m] === 'function') {
+        return A[m].apply(A, Array.prototype.slice.call(arguments, 1));
+      }
+    } catch (e) {
+      errors.push(m + ': ' + e);
+    }
+    return null;
+  }
+  function log(m) { try { api('log', '[placeholder] ' + m); } catch (e) {} }
+  function origin() {
+    try {
+      var s = api('getWindowOrigin');
+      if (s) { debug.lastOrigin = JSON.parse(s); return debug.lastOrigin; }
+    } catch (e) {}
+    return debug.lastOrigin;
+  }
+
+  function sendBounds() {
+    debug.calls++;
+    api('setBounds',
+      (pos.x - MARGIN) * SCALE, (pos.y - MARGIN) * SCALE,
+      WIN_W * SCALE, WIN_H * SCALE,
+      pos.x * SCALE, pos.y * SCALE,
+      SIZE * SCALE, BOTTOM_PAD * SCALE, 0, 0);
+  }
+
+  function pushRegions() {
+    var rects = [{
+      x: HIT_RECT.x * SCALE, y: HIT_RECT.y * SCALE,
+      width: HIT_RECT.w * SCALE, height: HIT_RECT.h * SCALE
+    }];
+    if (drag) {
+      rects.push({ x: 0, y: 0, width: WIN_W * SCALE, height: WIN_H * SCALE });
+    }
+    if (debug.menuOpen) {
+      var r = menu.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        rects.push({ x: r.x * SCALE, y: r.y * SCALE, width: r.width * SCALE, height: r.height * SCALE });
+      }
+    }
+    api('setInputRegions', JSON.stringify({ dragging: !!drag, rects: rects }));
+    api('setInputBusy', !!drag || debug.menuOpen);
+  }
+
+  function refreshDebug() {
+    dbg.textContent = '占位页 · dpr=' + SCALE + ' size=' + SIZE + '\n'
+      + 'win=' + WIN_W.toFixed(0) + 'x' + WIN_H.toFixed(0) + ' pos=' + pos.x.toFixed(0) + ',' + pos.y.toFixed(0) + '\n'
+      + 'screenX=' + debug.screenXMode + ' boundCalls=' + debug.calls;
+  }
+
+  // ---------- 拖拽（按 screenX 的实测语义自适应） ----------
+  var drag = null;
+  var lpTimer = null;
+  var longPressed = false;
+
+  function detectScreenXMode(e) {
+    var o = origin();
+    if (!o) return 'css';
+    var expCss = (o.x / SCALE) + e.clientX;   // screenX 为 CSS 屏幕坐标
+    var expPhys = o.x + e.clientX * SCALE;    // screenX 为物理像素
+    var dCss = Math.abs(e.screenX - expCss);
+    var dPhys = Math.abs(e.screenX - expPhys);
+    return dCss <= dPhys ? 'css' : 'phys';
+  }
+
+  fish.addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    longPressed = false;
+    debug.screenXMode = detectScreenXMode(e);
+    try { origin(); } catch (err) {}
+    drag = { sx: e.screenX, sy: e.screenY, px: pos.x, py: pos.y, moved: false };
+    debug.dragging = true;
+    try { fish.setPointerCapture(e.pointerId); } catch (err) {}
+    pushRegions();
+    refreshDebug();
+    if (lpTimer) clearTimeout(lpTimer);
+    lpTimer = setTimeout(function () {
+      lpTimer = null;
+      if (drag && !drag.moved && !debug.menuOpen) {
+        longPressed = true;
+        showMenu();
+        log('long-press menu');
+      }
+    }, 520);
+  });
+
+  function hideMenu() {
+    debug.menuOpen = false;
+    menu.style.display = 'none';
+    pushRegions();
+    refreshDebug();
+  }
+  function showMenu() {
+    debug.menuOpen = true;
+    menu.style.display = 'block';
+    var mx = Math.min(Math.max(pos.x + SIZE + 4 - MARGIN, 2), WIN_W - menu.offsetWidth - 2);
+    var my = Math.min(Math.max(pos.y - 40, 2), WIN_H - menu.offsetHeight - 2);
+    menu.style.left = Math.max(2, mx) + 'px';
+    menu.style.top = Math.max(2, my) + 'px';
+    pushRegions();
+    refreshDebug();
+  }
+  menu.addEventListener('pointerdown', function (e) { e.stopPropagation(); });
+  menu.addEventListener('click', function (e) {
+    var act = e.target && e.target.getAttribute ? e.target.getAttribute('data-act') : null;
+    if (act === 'home') {
+      pos.x = Math.max(0, VIEW.w - 24 - SIZE);
+      pos.y = Math.max(0, VIEW.h - 100 - STAGE_H);
+      sendBounds();
+    }
+    hideMenu();
+  });
+
+  window.addEventListener('pointermove', function (e) {
+    if (!drag) return;
+    if (lpTimer && (Math.abs(e.screenX - drag.sx) > 4 || Math.abs(e.screenY - drag.sy) > 4)) {
+      clearTimeout(lpTimer);
+      lpTimer = null;
+    }
+    var dx, dy;
+    if (debug.screenXMode === 'css') {
+      dx = e.screenX - drag.sx;
+      dy = e.screenY - drag.sy;
+    } else {
+      dx = (e.screenX - drag.sx) / SCALE;
+      dy = (e.screenY - drag.sy) / SCALE;
+    }
+    if (!drag.moved && (Math.abs(dx) + Math.abs(dy)) > 3) {
+      drag.moved = true;
+      hideMenu();
+    }
+    pos.x = Math.min(Math.max(drag.px + dx, -SIZE * 0.5), VIEW.w - SIZE * 0.5);
+    pos.y = Math.min(Math.max(drag.py + dy, -STAGE_H * 0.5), VIEW.h - STAGE_H * 0.5);
+    sendBounds();
+    refreshDebug();
+  }, { passive: false });
+
+  function endDrag(e) {
+    if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+    if (!drag) return;
+    drag = null;
+    debug.dragging = false;
+    try { fish.releasePointerCapture(e.pointerId); } catch (err) {}
+    pushRegions();
+    refreshDebug();
+  }
+  window.addEventListener('pointerup', function (e) { if (longPressed) { longPressed = false; return; } endDrag(e); });
+  window.addEventListener('pointercancel', endDrag);
+
+  fish.addEventListener('click', function (e) {
+    if (debug.menuOpen) { hideMenu(); return; }
+    if (longPressed) return;
+    log('click');
+    fish.style.transform = 'scale(1.25,.8)';
+    setTimeout(function () { fish.style.transform = ''; }, 130);
+  });
+
+  window.__petApplyDisplays = function (s) {
+    try {
+      var geo = typeof s === 'string' ? JSON.parse(s) : s;
+      if (!geo || !geo.hull) return false;
+      VIEW = { x: 0, y: 0, w: geo.hull.width / SCALE, h: geo.hull.height / SCALE };
+      pos.x = Math.min(Math.max(pos.x, -SIZE * 0.5), VIEW.w - SIZE * 0.5);
+      pos.y = Math.min(Math.max(pos.y, -STAGE_H * 0.5), VIEW.h - STAGE_H * 0.5);
+      sendBounds();
+      log('displays ' + VIEW.w + 'x' + VIEW.h);
+      return true;
+    } catch (e) { errors.push('displays: ' + e); return false; }
+  };
+  window.__petportInfo = function () {
+    return JSON.stringify({
+      placeholder: true, innerWidth: innerWidth, innerHeight: innerHeight,
+      dpr: devicePixelRatio, scale: SCALE, size: SIZE,
+      view: VIEW, pos: pos, win: [WIN_W, WIN_H], hit: HIT_RECT,
+      origin: debug.lastOrigin, screenXMode: debug.screenXMode,
+      dragging: debug.dragging, menuOpen: debug.menuOpen,
+      boundCalls: debug.calls, errors: errors
+    });
+  };
+  window.addEventListener('error', function (ev) { errors.push(String(ev.message)); });
+
+  // 启动：先按角落定位并通知宿主，然后上报可触摸区域
+  sendBounds();
+  pushRegions();
+  refreshDebug();
+  log('placeholder ready ' + innerWidth + 'x' + innerHeight + ' dpr=' + devicePixelRatio
+    + ' scale=' + SCALE + ' size=' + SIZE + ' win=' + WIN_W + 'x' + WIN_H);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=false
+android.nonTransitiveRClass=true
+org.gradle.daemon=false
+org.gradle.parallel=false
+
+# release 签名（本地自签名，非商店发布）
+# 复制本文件为 gradle.properties 并填入你自己的 keystore 信息：
+# RELEASE_STORE_PASSWORD=你的密码
+# RELEASE_KEY_ALIAS=你的别名
+# RELEASE_KEY_PASSWORD=你的密码

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- App 图标：深色圆角底 + 蓝色小鱼（自绘，不依赖正版素材；正版 logo 仅用于通知大图） -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#14161B"
+        android:pathData="M12,0 L96,0 A12,12 0 0 1 108,12 L108,96 A12,12 0 0 1 96,108 L12,108 A12,12 0 0 1 0,96 L0,12 A12,12 0 0 1 12,0 Z" />
+    <path
+        android:fillColor="#74C0FC"
+        android:pathData="M26,56 a30,20 0 1,0 60,0 a30,20 0 1,0 -60,0" />
+    <path
+        android:fillColor="#4DA3FF"
+        android:pathData="M28,56 L10,38 L13,56 L10,74 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,48 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0" />
+    <path
+        android:fillColor="#14161B"
+        android:pathData="M73,48 a3,3 0 1,0 6,0 a3,3 0 1,0 -6,0" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:pathData="M84,62 q6,4 12,0" />
+</vector>

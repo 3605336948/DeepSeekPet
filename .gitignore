@@ -1,0 +1,35 @@
+# ===== 构建产物 / IDE / 依赖 =====
+*.iml
+.idea/
+.gradle/
+build/
+app/build/
+android/.gradle/
+android/build/
+android/app/build/
+node_modules/
+captures/
+local.properties
+android/local.properties
+
+# ===== 签名密钥与凭据（绝不入库）=====
+android/release.keystore
+android/gradle.properties
+
+# ===== 生成目录：web/ 由 tools/web/build-web.mjs 从外部 DSH 运行时生成，含第三方代码，不入库 =====
+web/
+
+# ===== 打包产物（APK 走 GitHub Releases 分发，不入库）=====
+dist/*.apk
+*.apk
+*.aab
+
+# ===== 日志 / 一次性排查产物 / 私人扫描结果 =====
+*.log
+qa/logs/
+recon/*
+!recon/merged-config.json
+android/emu-evidence/
+
+# ===== 工作记忆 =====
+.workbuddy/
